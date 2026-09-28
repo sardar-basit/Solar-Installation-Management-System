@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: sims-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sims
+      POSTGRES_PASSWORD: sims
+      POSTGRES_DB: sims
+    ports:
+      - "5433:5432"
+    volumes:
+      - sims_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sims"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: sims-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://sims:sims@db:5432/sims?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: sims-dev-secret-change-in-production-32chars
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - sims_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  sims_pgdata:
+  sims_uploads:

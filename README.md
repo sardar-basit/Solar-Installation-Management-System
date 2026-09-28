@@ -1,36 +1,119 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SIMS — Solar Installation Management System
 
-## Getting Started
+Web application for managing solar customers, site surveys, system designs, quotations, installation projects, inventory, payments, maintenance, notifications, and reports.
 
-First, run the development server:
+## Stack
+
+- Next.js 15 (App Router) + TypeScript
+- Tailwind CSS
+- Prisma + PostgreSQL
+- NextAuth.js (credentials)
+- Docker Compose for Postgres
+
+## Quick start
+
+### 1. Database
+
+```bash
+docker compose up -d db
+# or use the already-running container on port 5433
+```
+
+### 2. Environment
+
+Copy `.env` (already present for local dev):
+
+```
+DATABASE_URL="postgresql://sims:sims@localhost:5433/sims?schema=public"
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="sims-dev-secret-change-in-production-32chars"
+UPLOAD_DIR="./uploads"
+EMAIL_FROM="noreply@sims.local"
+```
+
+Optional email: set `RESEND_API_KEY` or `SMTP_URL`. Set `EMAIL_ALL_ROLES=true` to email staff as well as customers.
+
+### 3. Install, migrate, seed
+
+```bash
+npm install
+npx prisma migrate dev
+npm run db:seed
+```
+
+### 4. Run
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Demo users
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Password for all: `password123`
 
-## Learn More
+| Username / Email | Role |
+|---|---|
+| admin@sims.local | Admin |
+| sales@sims.local | Sales |
+| surveyor@sims.local | Site Surveyor |
+| tech@sims.local | Installation Technician |
+| pm@sims.local | Project Manager |
+| accountant@sims.local | Accountant |
+| inventory@sims.local | Inventory Manager |
+| customer@sims.local | Customer (portal) |
 
-To learn more about Next.js, take a look at the following resources:
+## Functional coverage
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| FR | Module | Path |
+|---|---|---|
+| FR-01 | Auth | `/login` |
+| FR-02 | Customers | `/dashboard/customers` |
+| FR-03 | Surveys | `/dashboard/surveys` |
+| FR-04 | Designs | `/dashboard/designs` |
+| FR-05 | Quotations | `/dashboard/quotations` (+ print) |
+| FR-06 | Projects | `/dashboard/projects` |
+| FR-07 | Installations | `/dashboard/installations` |
+| FR-08 | Inventory | `/dashboard/inventory` |
+| FR-09 | Payments | `/dashboard/payments` (+ receipt print) |
+| FR-10 | Maintenance | `/dashboard/maintenance`, `/portal/maintenance` |
+| FR-11 | Notifications | `/dashboard/notifications`, `/portal/notifications` |
+| FR-12 | Reports | `/dashboard/reports` (+ CSV export) |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Business rules
 
-## Deploy on Vercel
+- Quotations require a system design on the project
+- Approving a quotation can move the project to `APPROVED`
+- Project status follows a validated state machine
+- Inventory issues are transactional and block on insufficient stock
+- Payments cannot exceed quotation total − paid
+- Audit log records critical create/update/status actions
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Backup (NFR-09)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+chmod +x scripts/backup.sh
+npm run db:backup
+```
+
+Cron example (daily 02:00):
+
+```
+0 2 * * * cd /path/to/SIMS && ./scripts/backup.sh
+```
+
+## Smoke test
+
+```bash
+npm run dev   # in one terminal
+npm run smoke # in another
+```
+
+## Docker (full stack)
+
+```bash
+docker compose up --build
+```
+
+App maps to port 3000; Postgres to 5433 on the host.

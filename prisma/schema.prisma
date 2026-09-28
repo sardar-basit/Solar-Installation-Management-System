@@ -1,0 +1,399 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SALES
+  SITE_SURVEYOR
+  INSTALLATION_TECH
+  PROJECT_MANAGER
+  ACCOUNTANT
+  INVENTORY_MANAGER
+  CUSTOMER
+}
+
+enum ProjectStatus {
+  PENDING
+  SURVEY_SCHEDULED
+  DESIGN_COMPLETED
+  APPROVED
+  INSTALLATION_IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum MaintenanceStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CARD
+  CHEQUE
+  OTHER
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUST
+  ISSUE
+}
+
+enum InventoryCategory {
+  PANEL
+  INVERTER
+  BATTERY
+  CABLE
+  MOUNTING
+  OTHER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  phone        String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customerProfile     Customer?
+  managedProjects     Project[]            @relation("ProjectManager")
+  assignments         ProjectAssignment[]
+  surveys             SiteSurvey[]
+  designs             SystemDesign[]
+  quotations          Quotation[]
+  installations       Installation[]       @relation("InstallationTech")
+  verifiedInstalls    Installation[]       @relation("InstallationVerifier")
+  paymentsRecorded    Payment[]
+  maintenanceAssigned MaintenanceRequest[] @relation("MaintenanceAssignee")
+  maintenanceCreated  MaintenanceRequest[] @relation("MaintenanceCreator")
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  stockMovements      StockMovement[]
+}
+
+model Customer {
+  id               String   @id @default(cuid())
+  userId           String?  @unique
+  fullName         String
+  email            String
+  phone            String
+  address          String
+  city             String?
+  siteAddress      String
+  siteCity         String?
+  siteNotes        String?
+  archived         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user                 User?                @relation(fields: [userId], references: [id])
+  projects             Project[]
+  payments             Payment[]
+  maintenanceRequests  MaintenanceRequest[]
+}
+
+model Project {
+  id              String        @id @default(cuid())
+  code            String        @unique
+  title           String
+  description     String?
+  status          ProjectStatus @default(PENDING)
+  customerId      String
+  managerId       String?
+  scheduledDate   DateTime?
+  completedAt     DateTime?
+  archived        Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  customer            Customer             @relation(fields: [customerId], references: [id])
+  manager             User?                @relation("ProjectManager", fields: [managerId], references: [id])
+  assignments         ProjectAssignment[]
+  survey              SiteSurvey?
+  design              SystemDesign?
+  quotation           Quotation?
+  installation        Installation?
+  payments            Payment[]
+  inventoryIssues     InventoryIssue[]
+  maintenanceRequests MaintenanceRequest[]
+}
+
+model ProjectAssignment {
+  id         String   @id @default(cuid())
+  projectId  String
+  userId     String
+  roleNote   String?
+  assignedAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+}
+
+model SiteSurvey {
+  id                String   @id @default(cuid())
+  projectId         String   @unique
+  surveyorId        String
+  roofType          String?
+  roofAreaSqm       Float?
+  roofOrientation   String?
+  shadingNotes      String?
+  siteAccessNotes   String?
+  monthlyConsumptionKwh Float?
+  requiredCapacityKw    Float?
+  notes             String?
+  surveyedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  surveyor    User               @relation(fields: [surveyorId], references: [id])
+  attachments SurveyAttachment[]
+}
+
+model SurveyAttachment {
+  id        String   @id @default(cuid())
+  surveyId  String
+  fileName  String
+  filePath  String
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  survey SiteSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+}
+
+model SystemDesign {
+  id                    String   @id @default(cuid())
+  projectId             String   @unique
+  designerId            String
+  capacityKw            Float
+  panelCount            Int
+  inverterCount         Int      @default(1)
+  batteryCount          Int      @default(0)
+  otherComponents       String?
+  yieldFactorKwhPerKwYear Float  @default(1400)
+  estimatedGenerationKwh Float
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  project  Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  designer User       @relation(fields: [designerId], references: [id])
+  quotation Quotation?
+}
+
+model Quotation {
+  id            String          @id @default(cuid())
+  projectId     String          @unique
+  designId      String          @unique
+  createdById   String
+  status        QuotationStatus @default(DRAFT)
+  subtotal      Float
+  taxAmount     Float           @default(0)
+  otherCharges  Float           @default(0)
+  totalAmount   Float
+  validUntil    DateTime?
+  notes         String?
+  approvedAt    DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  design    SystemDesign    @relation(fields: [designId], references: [id])
+  createdBy User            @relation(fields: [createdById], references: [id])
+  lineItems QuotationLine[]
+  payments  Payment[]
+}
+
+model QuotationLine {
+  id          String @id @default(cuid())
+  quotationId String
+  category    String
+  description String
+  quantity    Float  @default(1)
+  unitPrice   Float
+  amount      Float
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model Installation {
+  id              String   @id @default(cuid())
+  projectId       String   @unique
+  technicianId    String?
+  progressPercent Int      @default(0)
+  equipmentNotes  String?
+  statusNotes     String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  verifiedAt      DateTime?
+  verifiedById    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project    Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  technician User?               @relation("InstallationTech", fields: [technicianId], references: [id])
+  verifiedBy User?               @relation("InstallationVerifier", fields: [verifiedById], references: [id])
+  photos     InstallationPhoto[]
+}
+
+model InstallationPhoto {
+  id             String   @id @default(cuid())
+  installationId String
+  fileName       String
+  filePath       String
+  caption        String?
+  createdAt      DateTime @default(now())
+
+  installation Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+}
+
+model InventoryItem {
+  id          String            @id @default(cuid())
+  sku         String            @unique
+  name        String
+  category    InventoryCategory
+  quantity    Int               @default(0)
+  minLevel    Int               @default(5)
+  unitCost    Float             @default(0)
+  unit        String            @default("pcs")
+  description String?
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  movements StockMovement[]
+  issues    InventoryIssue[]
+}
+
+model StockMovement {
+  id        String            @id @default(cuid())
+  itemId    String
+  type      StockMovementType
+  quantity  Int
+  note      String?
+  userId    String?
+  createdAt DateTime          @default(now())
+
+  item InventoryItem @relation(fields: [itemId], references: [id])
+  user User?         @relation(fields: [userId], references: [id])
+}
+
+model InventoryIssue {
+  id        String   @id @default(cuid())
+  projectId String
+  itemId    String
+  quantity  Int
+  issuedAt  DateTime @default(now())
+  note      String?
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  item    InventoryItem @relation(fields: [itemId], references: [id])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  projectId   String
+  customerId  String
+  quotationId String?
+  amount      Float
+  method      PaymentMethod @default(CASH)
+  reference   String?
+  receiptNo   String        @unique
+  notes       String?
+  recordedById String
+  paidAt      DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+
+  project    Project    @relation(fields: [projectId], references: [id])
+  customer   Customer   @relation(fields: [customerId], references: [id])
+  quotation  Quotation? @relation(fields: [quotationId], references: [id])
+  recordedBy User       @relation(fields: [recordedById], references: [id])
+}
+
+model MaintenanceRequest {
+  id           String            @id @default(cuid())
+  projectId    String
+  customerId   String
+  createdById  String
+  assigneeId   String?
+  title        String
+  description  String
+  status       MaintenanceStatus @default(OPEN)
+  priority     String            @default("NORMAL")
+  resolution   String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  resolvedAt   DateTime?
+
+  project   Project             @relation(fields: [projectId], references: [id])
+  customer  Customer            @relation(fields: [customerId], references: [id])
+  createdBy User                @relation("MaintenanceCreator", fields: [createdById], references: [id])
+  assignee  User?               @relation("MaintenanceAssignee", fields: [assigneeId], references: [id])
+  history   MaintenanceHistory[]
+}
+
+model MaintenanceHistory {
+  id          String   @id @default(cuid())
+  requestId   String
+  status      MaintenanceStatus
+  note        String?
+  createdAt   DateTime @default(now())
+
+  request MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  details    String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
