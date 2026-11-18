@@ -117,3 +117,4 @@ docker compose up --build
 ```
 
 App maps to port 3000; Postgres to 5433 on the host.
+Academic Project
